@@ -23,6 +23,15 @@ func date(s string) *time.Time {
 	return &t
 }
 
+func dt(s string) time.Time {
+	t, _ := time.ParseInLocation("2006-01-02 15:04", s, time.Local)
+	return t
+}
+
+func f64(v float64) *float64 {
+	return &v
+}
+
 func Run(db *gorm.DB) {
 	var count int64
 	db.Model(&models.User{}).Count(&count)
@@ -105,6 +114,36 @@ func Run(db *gorm.DB) {
 	}
 	for i := range finds {
 		db.Create(&finds[i])
+	}
+
+	// 器物度量单：3 件文物各 2 次以上历史度量
+	measurements := []models.MeasurementSheet{
+		{FindID: finds[0].ID, MeasuredAt: dt("2024-03-12 10:20"), LengthMm: 48.2, WidthMm: 35.6, HeightMm: 6.8, WeightG: f64(32.5), CaliperNote: "数显卡尺，沿口沿弦向取最长", OperatorName: "周立群"},
+		{FindID: finds[0].ID, MeasuredAt: dt("2024-03-21 09:40"), LengthMm: 48.0, WidthMm: 35.4, HeightMm: 6.5, WeightG: f64(31.9), CaliperNote: "清洗去附着土后复测", OperatorName: "周立群"},
+		{FindID: finds[3].ID, MeasuredAt: dt("2024-05-08 14:10"), LengthMm: 62.4, WidthMm: 41.2, HeightMm: 18.6, WeightG: f64(88.3), CaliperNote: "游标卡尺，含残缺断面", OperatorName: "陈晓岚"},
+		{FindID: finds[3].ID, MeasuredAt: dt("2024-05-30 11:25"), LengthMm: 62.1, WidthMm: 41.0, HeightMm: 18.4, WeightG: f64(87.6), CaliperNote: "脱水稳定后复测", OperatorName: "陈晓岚"},
+		{FindID: finds[4].ID, MeasuredAt: dt("2024-06-18 16:00"), LengthMm: 132.5, WidthMm: 8.2, HeightMm: 8.0, WeightG: f64(12.4), CaliperNote: "全长含笄首", OperatorName: "王启程"},
+		{FindID: finds[4].ID, MeasuredAt: dt("2024-07-02 10:15"), LengthMm: 132.3, WidthMm: 8.1, HeightMm: 8.0, WeightG: nil, CaliperNote: "复测长度，本次未称重", OperatorName: "王启程"},
+	}
+	for i := range measurements {
+		db.Create(&measurements[i])
+	}
+
+	// 回写最新一份度量摘要到 Find 的冗余展示字段
+	latest := map[uint]*models.MeasurementSheet{}
+	for i := range measurements {
+		m := &measurements[i]
+		if cur, ok := latest[m.FindID]; !ok || m.MeasuredAt.After(cur.MeasuredAt) {
+			latest[m.FindID] = m
+		}
+	}
+	for findID, m := range latest {
+		var f models.Find
+		if err := db.First(&f, findID).Error; err != nil {
+			continue
+		}
+		f.ApplyLatestMeasurement(m)
+		db.Model(&f).Select("LatestMeasuredAt", "LatestDimsSummary", "LatestWeightG").Updates(&f)
 	}
 
 	log.Println("seed data inserted")

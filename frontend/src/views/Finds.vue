@@ -111,6 +111,18 @@
             描述
             <textarea v-model="form.description" />
           </label>
+          <div v-if="form.id && currentLatest" class="latest-measure full">
+            <span>
+              最近度量：{{ formatDateTime(currentLatest.latestMeasuredAt) }} ·
+              {{ currentLatest.latestDimsSummary }}
+              <template v-if="currentLatest.latestWeightG != null">
+                · 重 {{ currentLatest.latestWeightG }} g
+              </template>
+            </span>
+            <button type="button" class="btn secondary small" @click="goMeasurements">
+              查看度量单
+            </button>
+          </div>
         </div>
         <p v-if="formError" class="error">{{ formError }}</p>
         <div class="modal-actions">
@@ -124,7 +136,10 @@
 
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import api from '../api/http'
+
+const router = useRouter()
 
 const artifactTypes = ['陶片', '青铜器', '骨器', '玉器', '石器', '铁器', '其他']
 const list = ref([])
@@ -135,6 +150,7 @@ const filterType = ref('')
 const error = ref('')
 const formError = ref('')
 const showModal = ref(false)
+const currentLatest = ref(null)
 
 const form = reactive({
   id: null,
@@ -151,6 +167,16 @@ const form = reactive({
 function formatDate(v) {
   if (!v) return '-'
   return String(v).slice(0, 10)
+}
+
+function formatDateTime(v) {
+  if (!v) return '-'
+  return String(v).slice(0, 16).replace('T', ' ')
+}
+
+function goMeasurements() {
+  showModal.value = false
+  router.push({ name: 'measurements', query: { registerNo: form.registerNo } })
 }
 
 async function loadMeta() {
@@ -184,6 +210,7 @@ function openCreate() {
     description: '',
     storageLoc: ''
   })
+  currentLatest.value = null
   formError.value = ''
   showModal.value = true
 }
@@ -200,6 +227,13 @@ function openEdit(item) {
     description: item.description || '',
     storageLoc: item.storageLoc || ''
   })
+  currentLatest.value = item.latestDimsSummary
+    ? {
+        latestMeasuredAt: item.latestMeasuredAt,
+        latestDimsSummary: item.latestDimsSummary,
+        latestWeightG: item.latestWeightG
+      }
+    : null
   formError.value = ''
   showModal.value = true
 }
@@ -255,5 +289,18 @@ onMounted(async () => {
 
 .filters label {
   min-width: 200px;
+}
+
+.latest-measure {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  background: #f8f2e7;
+  font-size: 0.9rem;
+  color: var(--muted);
 }
 </style>

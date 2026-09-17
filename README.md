@@ -1,6 +1,6 @@
 # 考古发掘出土文物编目系统（DigCatalog）
 
-面向考古工地出土文物登记与编目的全栈演示项目：支持发掘工地、探方/发掘单位、出土文物、材质字典的 CRUD，以及概览统计。
+面向考古工地出土文物登记与编目的全栈演示项目：支持发掘工地、探方/发掘单位、出土文物、器物度量单、材质字典的 CRUD，以及概览统计。
 
 ## 技术栈
 
@@ -43,14 +43,17 @@ docker compose up --build
 | `admin` | `123456` | 管理员 |
 | `recorder` | `123456` | 记录员 |
 
+首次启动会自动写入种子数据：3 处工地、4 个探方、6 件文物，其中 3 件文物（如 `EL-2024-0001`、`LZ-2024-0010`、`YX-2024-0021`）各含 2 次以上历史度量单，可直接在「度量单」页按登记号检索查看。
+
 ## 功能模块
 
 1. **登录认证** — 管理员 / 记录员角色，JWT 鉴权
 2. **发掘工地 Site** — 名称、时代、经纬度、负责人
 3. **探方/发掘单位 Unit** — 所属工地、编号、深度区间、地层简述
 4. **出土文物 Find** — 所属探方、登记号、器物类型、材质、完整度、出土日期、描述、存放位置
-5. **材质分类 Material** — 名称、描述（字典表）
-6. **概览页** — 工地数、探方数、文物总数、按器物类型统计
+5. **器物度量单 MeasurementSheet** — 一次度量挂一个 Find：度量时间、长/宽/高（mm，非负）、重量（g，可空非负）、卡尺备注、操作人；同一文物可保留多份历史度量，按时间倒序查看；最新一份摘要自动回写到文物的展示字段（不改动原描述）
+6. **材质分类 Material** — 名称、描述（字典表）
+7. **概览页** — 工地数、探方数、文物总数、按器物类型统计
 
 ## API 前缀
 
@@ -59,7 +62,9 @@ docker compose up --build
 - `POST /api/auth/login`
 - `GET|POST|PUT|DELETE /api/sites`
 - `GET|POST|PUT|DELETE /api/units`
-- `GET|POST|PUT|DELETE /api/finds`
+- `GET|POST|PUT|DELETE /api/finds`（列表支持 `unitId`、`artifactType`、`registerNo` 查询参数）
+- `GET|POST /api/finds/:id/measurements` — 某件文物的度量单列表（按度量时间倒序）/ 新建度量
+- `PUT|DELETE /api/measurements/:id` — 修改 / 删除单份度量单
 - `GET|POST|PUT|DELETE /api/materials`
 - `GET /api/overview`
 
