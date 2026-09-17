@@ -23,6 +23,13 @@ func date(s string) *time.Time {
 	return &t
 }
 
+func fp(v float64) *float64 { return &v }
+
+func at(s string) time.Time {
+	t, _ := time.Parse("2006-01-02 15:04:05", s)
+	return t
+}
+
 func Run(db *gorm.DB) {
 	var count int64
 	db.Model(&models.User{}).Count(&count)
@@ -105,6 +112,53 @@ func Run(db *gorm.DB) {
 	}
 	for i := range finds {
 		db.Create(&finds[i])
+	}
+
+	// 度量单：EL-2024-0001 与 LZ-2024-0010 各留多份历史，按时间倒序可追溯
+	sheets := []models.MeasurementSheet{
+		// 陶片 EL-2024-0001：出土后初次测量 + 修复后复测
+		{
+			FindID: finds[0].ID, MeasuredAt: at("2024-03-13 09:30:00"),
+			LengthMm: 42.5, WidthMm: 28.2, HeightMm: 7.8, WeightG: fp(18.6),
+			CaliperNote: "数显卡尺沿口沿最长轴测量；边缘有新碴口", OperatorName: "周仪",
+		},
+		{
+			FindID: finds[0].ID, MeasuredAt: at("2024-04-20 14:10:00"),
+			LengthMm: 42.3, WidthMm: 28.0, HeightMm: 7.9, WeightG: fp(18.4),
+			CaliperNote: "清理加固后复测，尺寸微缩属正常失水", OperatorName: "周仪",
+		},
+		// 玉琮残片 LZ-2024-0010：两次测量 + 一次高精度复称
+		{
+			FindID: finds[3].ID, MeasuredAt: at("2024-05-09 10:05:00"),
+			LengthMm: 63.4, WidthMm: 55.1, HeightMm: 22.6, WeightG: fp(96.2),
+			CaliperNote: "残角外廓取最大长、宽；厚度在射部中段", OperatorName: "沈衡",
+		},
+		{
+			FindID: finds[3].ID, MeasuredAt: at("2024-06-01 11:20:00"),
+			LengthMm: 63.4, WidthMm: 55.0, HeightMm: 22.6, WeightG: fp(96.0),
+			CaliperNote: "电子天平复称；刻纹深度未计入高度", OperatorName: "沈衡",
+		},
+	}
+	for i := range sheets {
+		db.Create(&sheets[i])
+	}
+
+	// 将各 Find 最新一份度量摘要回写展示字段（保持 Description 原样）
+	latestByFind := map[uint]models.MeasurementSheet{}
+	for _, s := range sheets {
+		cur, ok := latestByFind[s.FindID]
+		if !ok || s.MeasuredAt.After(cur.MeasuredAt) {
+			latestByFind[s.FindID] = s
+		}
+	}
+	for findID, s := range latestByFind {
+		db.Model(&models.Find{}).Where("id = ?", findID).Updates(map[string]interface{}{
+			"last_measured_at": s.MeasuredAt,
+			"last_length_mm":   s.LengthMm,
+			"last_width_mm":    s.WidthMm,
+			"last_height_mm":   s.HeightMm,
+			"last_weight_g":    s.WeightG,
+		})
 	}
 
 	log.Println("seed data inserted")

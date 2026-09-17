@@ -63,9 +63,32 @@ type Find struct {
 	FindDate     *time.Time     `json:"findDate" gorm:"type:date"`
 	Description  string         `json:"description" gorm:"type:text"`
 	StorageLoc   string         `json:"storageLoc" gorm:"size:128"`
-	CreatedAt    time.Time      `json:"createdAt"`
-	UpdatedAt    time.Time      `json:"updatedAt"`
-	DeletedAt    gorm.DeletedAt `json:"-" gorm:"index"`
-	Unit         *Unit          `json:"unit,omitempty" gorm:"foreignKey:UnitID"`
-	Material     *Material      `json:"material,omitempty" gorm:"foreignKey:MaterialID"`
+	// 以下为最近一次度量的冗余展示字段，仅由度量单回写，不影响 Description
+	LastMeasuredAt *time.Time `json:"lastMeasuredAt" gorm:"index"`
+	LastLengthMm   float64    `json:"lastLengthMm"`
+	LastWidthMm    float64    `json:"lastWidthMm"`
+	LastHeightMm   float64    `json:"lastHeightMm"`
+	LastWeightG    *float64   `json:"lastWeightG"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	UpdatedAt      time.Time  `json:"updatedAt"`
+	DeletedAt      gorm.DeletedAt `json:"-" gorm:"index"`
+	Unit           *Unit          `json:"unit,omitempty" gorm:"foreignKey:UnitID"`
+	Material       *Material      `json:"material,omitempty" gorm:"foreignKey:MaterialID"`
+}
+
+// MeasurementSheet 器物度量单：一次度量挂一个 Find，同一 Find 可保留多份历史记录
+type MeasurementSheet struct {
+	ID          uint           `json:"id" gorm:"primaryKey"`
+	FindID      uint           `json:"findId" gorm:"not null;index"`
+	MeasuredAt  time.Time      `json:"measuredAt" gorm:"not null;index"`
+	LengthMm    float64        `json:"lengthMm"` // 长（毫米），非负
+	WidthMm     float64        `json:"widthMm"`  // 宽（毫米），非负
+	HeightMm    float64        `json:"heightMm"` // 高（毫米），非负
+	WeightG     *float64       `json:"weightG"`  // 重（克），可空，非负
+	CaliperNote string         `json:"caliperNote" gorm:"type:text"` // 卡尺测量备注
+	OperatorName string        `json:"operatorName" gorm:"size:64;not null"`
+	CreatedAt   time.Time      `json:"createdAt"`
+	UpdatedAt   time.Time      `json:"updatedAt"`
+	DeletedAt   gorm.DeletedAt `json:"-" gorm:"index"`
+	Find        *Find          `json:"find,omitempty" gorm:"foreignKey:FindID"`
 }

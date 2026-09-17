@@ -112,6 +112,23 @@
             <textarea v-model="form.description" />
           </label>
         </div>
+
+        <div v-if="form.id" class="measure-box">
+          <div class="measure-head">
+            <span class="measure-title">最近度量</span>
+            <button type="button" class="btn secondary small" @click="goMeasurements">
+              查看度量单 →
+            </button>
+          </div>
+          <p v-if="latestMeasuredAt" class="measure-text">
+            {{ formatDateTime(latestMeasuredAt) }} ｜
+            长 {{ latestLengthMm }} × 宽 {{ latestWidthMm }} × 高 {{ latestHeightMm }} mm<template
+              v-if="latestWeightG != null"
+            > ｜ 重 {{ latestWeightG }} g</template>
+          </p>
+          <p v-else class="page-sub">尚无度量记录</p>
+        </div>
+
         <p v-if="formError" class="error">{{ formError }}</p>
         <div class="modal-actions">
           <button class="btn secondary" @click="showModal = false">取消</button>
@@ -124,7 +141,10 @@
 
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import api from '../api/http'
+
+const router = useRouter()
 
 const artifactTypes = ['陶片', '青铜器', '骨器', '玉器', '石器', '铁器', '其他']
 const list = ref([])
@@ -135,6 +155,16 @@ const filterType = ref('')
 const error = ref('')
 const formError = ref('')
 const showModal = ref(false)
+const latestMeasuredAt = ref('')
+const latestLengthMm = ref(0)
+const latestWidthMm = ref(0)
+const latestHeightMm = ref(0)
+const latestWeightG = ref(null)
+
+function formatDateTime(v) {
+  if (!v) return ''
+  return String(v).replace('T', ' ').slice(0, 16)
+}
 
 const form = reactive({
   id: null,
@@ -185,6 +215,11 @@ function openCreate() {
     storageLoc: ''
   })
   formError.value = ''
+  latestMeasuredAt.value = ''
+  latestLengthMm.value = 0
+  latestWidthMm.value = 0
+  latestHeightMm.value = 0
+  latestWeightG.value = null
   showModal.value = true
 }
 
@@ -200,8 +235,18 @@ function openEdit(item) {
     description: item.description || '',
     storageLoc: item.storageLoc || ''
   })
+  latestMeasuredAt.value = item.lastMeasuredAt || ''
+  latestLengthMm.value = item.lastLengthMm ?? 0
+  latestWidthMm.value = item.lastWidthMm ?? 0
+  latestHeightMm.value = item.lastHeightMm ?? 0
+  latestWeightG.value = item.lastWeightG ?? null
   formError.value = ''
   showModal.value = true
+}
+
+function goMeasurements() {
+  showModal.value = false
+  router.push({ name: 'measurements', query: { findId: form.id } })
 }
 
 async function save() {
@@ -255,5 +300,29 @@ onMounted(async () => {
 
 .filters label {
   min-width: 200px;
+}
+
+.measure-box {
+  margin: 0.25rem 0 0.5rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid rgba(196, 165, 116, 0.45);
+  border-radius: 10px;
+  background: rgba(196, 165, 116, 0.1);
+}
+
+.measure-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.35rem;
+}
+
+.measure-title {
+  font-weight: 600;
+}
+
+.measure-text {
+  margin: 0;
+  font-size: 0.9rem;
 }
 </style>

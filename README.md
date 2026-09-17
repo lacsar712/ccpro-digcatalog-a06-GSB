@@ -49,8 +49,11 @@ docker compose up --build
 2. **发掘工地 Site** — 名称、时代、经纬度、负责人
 3. **探方/发掘单位 Unit** — 所属工地、编号、深度区间、地层简述
 4. **出土文物 Find** — 所属探方、登记号、器物类型、材质、完整度、出土日期、描述、存放位置
-5. **材质分类 Material** — 名称、描述（字典表）
-6. **概览页** — 工地数、探方数、文物总数、按器物类型统计
+5. **器物度量单 MeasurementSheet** — 一次度量挂接一件文物（Find）；同一文物可保留多份历史度量，列表按测量时间倒序；记录测量时间、长/宽/高（mm）、重量（g，可空）、卡尺测量备注与测量人。最新一份的尺寸摘要会回写到 Find 的展示字段（`lastLengthMm` 等），**不修改原描述 `description`**
+6. **材质分类 Material** — 名称、描述（字典表）
+7. **概览页** — 工地数、探方数、文物总数、按器物类型统计
+
+种子数据含至少 2 件文物（`EL-2024-0001` 陶片、`LZ-2024-0010` 玉琮残片）各 2 次历史度量。
 
 ## API 前缀
 
@@ -60,6 +63,7 @@ docker compose up --build
 - `GET|POST|PUT|DELETE /api/sites`
 - `GET|POST|PUT|DELETE /api/units`
 - `GET|POST|PUT|DELETE /api/finds`
+- `GET|POST /api/finds/:id/measurements`（按测量时间倒序的历史度量列表 / 新建度量）
 - `GET|POST|PUT|DELETE /api/materials`
 - `GET /api/overview`
 

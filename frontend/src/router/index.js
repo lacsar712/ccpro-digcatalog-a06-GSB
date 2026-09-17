@@ -6,6 +6,7 @@ import Overview from '../views/Overview.vue'
 import Sites from '../views/Sites.vue'
 import Units from '../views/Units.vue'
 import Finds from '../views/Finds.vue'
+import Measurements from '../views/Measurements.vue'
 import Materials from '../views/Materials.vue'
 
 const routes = [
@@ -18,6 +19,7 @@ const routes = [
       { path: 'sites', name: 'sites', component: Sites },
       { path: 'units', name: 'units', component: Units },
       { path: 'finds', name: 'finds', component: Finds },
+      { path: 'measurements', name: 'measurements', component: Measurements },
       { path: 'materials', name: 'materials', component: Materials }
     ]
   }

@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -320,6 +322,9 @@ func (h *Handler) ListFinds(c *gin.Context) {
 	if at := c.Query("artifactType"); at != "" {
 		q = q.Where("artifact_type = ?", at)
 	}
+	if rn := c.Query("registerNo"); rn != "" {
+		q = q.Where("register_no LIKE ?", "%"+rn+"%")
+	}
 	if err := q.Find(&finds).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -407,7 +412,122 @@ func (h *Handler) DeleteFind(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	// 同步清理该文物的历史度量单，避免孤儿记录
+	if err := h.DB.Where("find_id = ?", id).Delete(&models.MeasurementSheet{}).Error; err != nil {
+		log.Printf("delete measurement sheets for find %d failed: %v", id, err)
+	}
 	c.JSON(http.StatusOK, gin.H{"message": "已删除"})
+}
+
+// ---------- Measurement Sheets ----------
+
+type measurementReq struct {
+	MeasuredAt   string   `json:"measuredAt"`
+	LengthMm     float64  `json:"lengthMm"`
+	WidthMm      float64  `json:"widthMm"`
+	HeightMm     float64  `json:"heightMm"`
+	WeightG      *float64 `json:"weightG"`
+	CaliperNote  string   `json:"caliperNote"`
+	OperatorName string   `json:"operatorName"`
+}
+
+// 支持 RFC3339、datetime-local 与仅日期等入参
+func parseMeasuredAt(s string) (time.Time, error) {
+	layouts := []string{
+		time.RFC3339,
+		"2006-01-02T15:04:05",
+		"2006-01-02T15:04",
+		"2006-01-02 15:04:05",
+		"2006-01-02 15:04",
+		"2006-01-02",
+	}
+	for _, layout := range layouts {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("invalid measuredAt: %s", s)
+}
+
+// 将最新一份度量摘要回写 Find 的展示字段（不触碰 Description）
+func (h *Handler) syncFindMeasurementSummary(findID uint) error {
+	var latest models.MeasurementSheet
+	if err := h.DB.Where("find_id = ?", findID).Order("measured_at desc, id desc").First(&latest).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil
+		}
+		return err
+	}
+	return h.DB.Model(&models.Find{}).Where("id = ?", findID).Updates(map[string]interface{}{
+		"last_measured_at": latest.MeasuredAt,
+		"last_length_mm":   latest.LengthMm,
+		"last_width_mm":    latest.WidthMm,
+		"last_height_mm":   latest.HeightMm,
+		"last_weight_g":    latest.WeightG,
+	}).Error
+}
+
+func (h *Handler) ListMeasurements(c *gin.Context) {
+	findID, _ := strconv.Atoi(c.Param("id"))
+	var find models.Find
+	if err := h.DB.First(&find, findID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "文物不存在"})
+		return
+	}
+	var sheets []models.MeasurementSheet
+	if err := h.DB.Where("find_id = ?", findID).
+		Order("measured_at desc, id desc").
+		Find(&sheets).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, sheets)
+}
+
+func (h *Handler) CreateMeasurement(c *gin.Context) {
+	findID, _ := strconv.Atoi(c.Param("id"))
+	var find models.Find
+	if err := h.DB.First(&find, findID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "文物不存在"})
+		return
+	}
+	var req measurementReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数无效"})
+		return
+	}
+	measuredAt, err := parseMeasuredAt(req.MeasuredAt)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "度量时间格式无效，应为 RFC3339 或 YYYY-MM-DD HH:MM:SS"})
+		return
+	}
+	if req.OperatorName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "测量人必填"})
+		return
+	}
+	if req.LengthMm < 0 || req.WidthMm < 0 || req.HeightMm < 0 || (req.WeightG != nil && *req.WeightG < 0) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "长宽高与重量必须为非负数"})
+		return
+	}
+	sheet := models.MeasurementSheet{
+		FindID:       uint(findID),
+		MeasuredAt:   measuredAt,
+		LengthMm:     req.LengthMm,
+		WidthMm:      req.WidthMm,
+		HeightMm:     req.HeightMm,
+		WeightG:      req.WeightG,
+		CaliperNote:  req.CaliperNote,
+		OperatorName: req.OperatorName,
+	}
+	if err := h.DB.Create(&sheet).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.syncFindMeasurementSummary(uint(findID)); err != nil {
+		// 摘要回写失败不影响度量单本身，仅记录
+		log.Printf("sync measurement summary for find %d failed: %v", findID, err)
+	}
+	c.JSON(http.StatusCreated, sheet)
 }
 
 // ---------- Overview ----------
